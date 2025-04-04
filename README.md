@@ -55,6 +55,12 @@ echo "HYPERBOLIC_API_KEY=your-api-key-here" > .env
 
 Replace `your-api-key-here` with your actual Hyperbolic API key.
 
+### 6. Make the Script Executable (Unix/Linux/Mac)
+
+```bash
+chmod +x hypercompare
+```
+
 ## Usage
 
 ### Basic Usage
@@ -62,13 +68,13 @@ Replace `your-api-key-here` with your actual Hyperbolic API key.
 To compare two models with default test prompts:
 
 ```bash
-python cli.py <model_a> <model_b>
+./hypercompare <model_a> <model_b>
 ```
 
 For example:
 
 ```bash
-python cli.py meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-Instruct
+./hypercompare meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-Instruct
 ```
 
 ### Custom Prompts
@@ -76,7 +82,7 @@ python cli.py meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-
 To use custom prompts from a file:
 
 ```bash
-python cli.py <model_a> <model_b> --prompts your_prompts.txt
+./hypercompare <model_a> <model_b> --prompts your_prompts.txt
 ```
 
 ### Prompt File Format

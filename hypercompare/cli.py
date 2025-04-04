@@ -134,10 +134,6 @@ def compare_models(model_a_summary, model_b_summary):
     model_a = model_a_summary["model"]
     model_b = model_b_summary["model"]
     
-    print("\n" + "="*80)
-    print(f"MODEL COMPARISON: {model_a} vs {model_b}")
-    print("="*80)
-    
     # Check if either model had fatal errors
     model_a_failed = model_a_summary["avg_latency"] is None
     model_b_failed = model_b_summary["avg_latency"] is None
@@ -152,91 +148,34 @@ def compare_models(model_a_summary, model_b_summary):
         print(f"\n{model_b} failed to produce any results. Cannot compare.")
         return
     
-    # Speed metrics
-    print("\nSPEED METRICS:")
+    # Speed Metrics section
+    print("\nSpeed Metrics:")
     if model_a_summary["avg_ttft"] and model_b_summary["avg_ttft"]:
-        ttft_diff = model_b_summary["avg_ttft"] - model_a_summary["avg_ttft"]
-        ttft_pct = (ttft_diff / model_a_summary["avg_ttft"]) * 100
-        print(f"Time to First Token: {model_a_summary['avg_ttft']:.3f}s vs {model_b_summary['avg_ttft']:.3f}s" +
-              f" ({'+' if ttft_diff > 0 else ''}{ttft_pct:.1f}%)")
-    else:
-        print(f"Time to First Token: {model_a_summary['avg_ttft']:.3f}s vs {model_b_summary['avg_ttft']:.3f}s")
+        ttft_ms_a = model_a_summary["avg_ttft"] * 1000  # Convert to ms
+        ttft_ms_b = model_b_summary["avg_ttft"] * 1000  # Convert to ms
+        print(f"Time to first token: {ttft_ms_a:.0f}ms vs {ttft_ms_b:.0f}ms")
     
-    latency_diff = model_b_summary["avg_latency"] - model_a_summary["avg_latency"]
-    latency_pct = (latency_diff / model_a_summary["avg_latency"]) * 100
-    print(f"Total Latency: {model_a_summary['avg_latency']:.3f}s vs {model_b_summary['avg_latency']:.3f}s" +
-          f" ({'+' if latency_diff > 0 else ''}{latency_pct:.1f}%)")
+    print(f"Total latency: {model_a_summary['avg_latency']:.1f}s vs {model_b_summary['avg_latency']:.1f}s")
+    print(f"Tokens/sec: {model_a_summary['avg_throughput']:.0f} vs {model_b_summary['avg_throughput']:.0f}")
     
-    throughput_diff = model_b_summary["avg_throughput"] - model_a_summary["avg_throughput"]
-    throughput_pct = (throughput_diff / model_a_summary["avg_throughput"]) * 100 if model_a_summary["avg_throughput"] else 0
-    print(f"Tokens/sec: {model_a_summary['avg_throughput']:.2f} vs {model_b_summary['avg_throughput']:.2f}" +
-          f" ({'+' if throughput_diff > 0 else ''}{throughput_pct:.1f}%)")
-    
-    # Accuracy metrics
+    # Accuracy Metrics section
     if model_a_summary["accuracy_score"] is not None and model_b_summary["accuracy_score"] is not None:
-        print("\nACCURACY METRICS:")
-        print(f"Correct Responses: {model_a_summary['correct_responses']}/{model_a_summary['total_prompts']} vs " +
-              f"{model_b_summary['correct_responses']}/{model_b_summary['total_prompts']}")
-        accuracy_diff = model_b_summary["accuracy_score"] - model_a_summary["accuracy_score"]
-        print(f"Accuracy Score: {model_a_summary['accuracy_score']:.2f} vs {model_b_summary['accuracy_score']:.2f}" +
-              f" ({'+' if accuracy_diff > 0 else ''}{accuracy_diff*100:.1f}%)")
+        print("\nAccuracy Metrics:")
+        acc_a = model_a_summary["accuracy_score"] * 100
+        acc_b = model_b_summary["accuracy_score"] * 100
+        print(f"Accuracy: {acc_a:.1f}% vs {acc_b:.1f}%")
+        
+        # Note: We don't have MMLU, HumanEval, or Consistency metrics in our implementation
+        # but we can display the appropriate accuracy metrics we do have
     
-    # Cost analysis
-    print("\nCOST ANALYSIS:")
+    # Cost Analysis section
+    print("\nCost Analysis:")
     print(f"Input tokens: ${model_a_summary['pricing']['input_rate']}/1K vs ${model_b_summary['pricing']['input_rate']}/1K")
     print(f"Output tokens: ${model_a_summary['pricing']['output_rate']}/1K vs ${model_b_summary['pricing']['output_rate']}/1K")
     
     cost_ratio_a = 1.0  # baseline
     cost_ratio_b = model_b_summary["total_cost"] / model_a_summary["total_cost"] if model_a_summary["total_cost"] else 0
-    print(f"Total Cost: ${model_a_summary['total_cost']:.6f} vs ${model_b_summary['total_cost']:.6f}")
     print(f"Cost-performance ratio: {cost_ratio_a:.1f}x vs {cost_ratio_b:.1f}x")
-    
-    # Overall assessment
-    print("\nOVERALL WINNER:")
-    advantages_a = []
-    advantages_b = []
-    
-    if model_a_summary["avg_ttft"] and model_b_summary["avg_ttft"]:
-        if model_a_summary["avg_ttft"] < model_b_summary["avg_ttft"]:
-            advantages_a.append("Faster TTFT")
-        elif model_b_summary["avg_ttft"] < model_a_summary["avg_ttft"]:
-            advantages_b.append("Faster TTFT")
-    
-    if model_a_summary["avg_latency"] < model_b_summary["avg_latency"]:
-        advantages_a.append("Lower latency")
-    elif model_b_summary["avg_latency"] < model_a_summary["avg_latency"]:
-        advantages_b.append("Lower latency")
-    
-    if model_a_summary["avg_throughput"] > model_b_summary["avg_throughput"]:
-        advantages_a.append("Higher throughput")
-    elif model_b_summary["avg_throughput"] > model_a_summary["avg_throughput"]:
-        advantages_b.append("Higher throughput")
-    
-    if model_a_summary["accuracy_score"] is not None and model_b_summary["accuracy_score"] is not None:
-        if model_a_summary["accuracy_score"] > model_b_summary["accuracy_score"]:
-            advantages_a.append("Better accuracy")
-        elif model_b_summary["accuracy_score"] > model_a_summary["accuracy_score"]:
-            advantages_b.append("Better accuracy")
-    
-    if model_a_summary["total_cost"] < model_b_summary["total_cost"]:
-        advantages_a.append("Lower cost")
-    elif model_b_summary["total_cost"] < model_a_summary["total_cost"]:
-        advantages_b.append("Lower cost")
-    
-    # Determine winner based on advantages count
-    if len(advantages_a) > len(advantages_b):
-        print(f"{model_a} leads in {len(advantages_a)} categories: {', '.join(advantages_a)}")
-        if advantages_b:
-            print(f"{model_b} leads in {len(advantages_b)} categories: {', '.join(advantages_b)}")
-    elif len(advantages_b) > len(advantages_a):
-        print(f"{model_b} leads in {len(advantages_b)} categories: {', '.join(advantages_b)}")
-        if advantages_a:
-            print(f"{model_a} leads in {len(advantages_a)} categories: {', '.join(advantages_a)}")
-    else:
-        print(f"Both models are evenly matched")
-        if advantages_a:
-            print(f"{model_a} leads in: {', '.join(advantages_a)}")
-            print(f"{model_b} leads in: {', '.join(advantages_b)}")
 
 def main():
     """Main CLI entry point."""
@@ -246,10 +185,10 @@ def main():
         epilog="""
 Examples:
   # Compare two models with default test prompts
-  python cli.py meta-llama/Meta-Llama-3-70B-Instruct mistralai/Mixtral-8x7B-Instruct-v0.1
+  hypercompare meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-Instruct
         
   # Use custom prompts from a file
-  python cli.py model1 model2 --prompts your_prompts.txt
+  hypercompare model1 model2 --prompts your_prompts.txt
         
 Prompt file format (each line):
   "Who wrote Hamlet? | Shakespeare"  # Question with expected answer after |
