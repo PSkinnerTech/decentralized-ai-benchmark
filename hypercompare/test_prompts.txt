@@ -1,0 +1,9 @@
+# Test prompts with expected answers
+Who wrote Hamlet? | Shakespeare, William Shakespeare
+What is 2 + 2? | 4, four
+What is the capital of France? | Paris
+What is the largest planet in our solar system? | Jupiter
+
+# Prompts without expected answers (just for response generation)
+Summarize the benefits of exercise in 2-3 sentences.
+What are three programming best practices? 
