@@ -8,6 +8,7 @@ A CLI tool for benchmarking different language models hosted on Hyperbolic's API
 - **Accuracy Testing**: Evaluate model responses against expected keywords
 - **Cost Analysis**: Calculate token usage and associated costs
 - **Model Comparison**: Compare metrics between two different models
+- **MMLU Evaluation**: Automatic testing on Massive Multitask Language Understanding benchmark
 - **Simple CLI**: Easy-to-use command-line interface
 - **Deterministic Testing**: Uses temperature=0 for reproducible benchmarking results
 
@@ -66,7 +67,7 @@ chmod +x hypercompare
 
 ### Basic Usage
 
-To compare two models with default test prompts:
+To compare two models with default test prompts and MMLU evaluation:
 
 ```bash
 ./hypercompare <model_a> <model_b>
@@ -76,6 +77,12 @@ For example:
 
 ```bash
 ./hypercompare meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-Instruct
+```
+
+To run a quicker comparison without MMLU evaluation:
+
+```bash
+./hypercompare <model_a> <model_b> --skip-mmlu
 ```
 
 ### Custom Prompts
@@ -110,6 +117,9 @@ What are three programming best practices?
   --system SYSTEM         System prompt to use for all test cases
   --verbose               Show more detailed output and warnings
   --temperature TEMP      Temperature setting for model inference (default: 0 for deterministic outputs)
+  --skip-mmlu             Skip MMLU evaluation (faster but less comprehensive)
+  --n-shots N_SHOTS       Number of few-shot examples to use for MMLU (default: 0 for zero-shot)
+  --num-questions NUM     Number of questions per MMLU subject (default: 5)
 ```
 
 ### Benchmarking Configuration
@@ -124,13 +134,17 @@ The tool uses the following configuration to ensure consistent, reproducible ben
 
 The tool will output:
 
-1. **For each model:**
+1. **Standard Benchmark:**
    - Individual test results with metrics
    - Model summary with averages
 
-2. **Comparison summary:**
+2. **MMLU Evaluation (if not skipped):**
+   - Performance on multiple-choice questions across various subjects
+   - Accuracy per subject and overall
+
+3. **Comprehensive Comparison:**
    - Speed metrics (TTFT, latency, throughput)
-   - Accuracy scores
+   - Accuracy scores (both standard prompts and MMLU)
    - Cost analysis
    - Overall assessment of which model performs better in different categories
 
