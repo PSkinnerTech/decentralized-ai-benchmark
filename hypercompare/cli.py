@@ -9,6 +9,15 @@ import time
 # Import our metrics function
 from hyperapi import get_model_metrics, MODEL_PRICING
 
+# Import MMLU evaluation functions
+try:
+    from mmlu_eval import evaluate_model_on_mmlu, compare_mmlu_results, prepare_mmlu_test_cases
+    from mmlu_dataset import DEFAULT_SUBJECTS, prepare_few_shot_examples, load_dataset
+    MMLU_AVAILABLE = True
+except ImportError:
+    print("Warning: MMLU evaluation module not available")
+    MMLU_AVAILABLE = False
+
 # Load environment variables
 load_dotenv()
 
@@ -129,10 +138,12 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperat
     
     return summary
 
-def compare_models(model_a_summary, model_b_summary):
+def compare_models(model_a_summary, model_b_summary, mmlu_comparison=None):
     """Print a side-by-side comparison of two models."""
     model_a = model_a_summary["model"]
     model_b = model_b_summary["model"]
+    
+    print(f"\n============ COMPARISON: {model_a} vs {model_b} ============")
     
     # Check if either model had fatal errors
     model_a_failed = model_a_summary["avg_latency"] is None
@@ -159,14 +170,17 @@ def compare_models(model_a_summary, model_b_summary):
     print(f"Tokens/sec: {model_a_summary['avg_throughput']:.0f} vs {model_b_summary['avg_throughput']:.0f}")
     
     # Accuracy Metrics section
+    print("\nAccuracy Metrics:")
     if model_a_summary["accuracy_score"] is not None and model_b_summary["accuracy_score"] is not None:
-        print("\nAccuracy Metrics:")
         acc_a = model_a_summary["accuracy_score"] * 100
         acc_b = model_b_summary["accuracy_score"] * 100
-        print(f"Accuracy: {acc_a:.1f}% vs {acc_b:.1f}%")
-        
-        # Note: We don't have MMLU, HumanEval, or Consistency metrics in our implementation
-        # but we can display the appropriate accuracy metrics we do have
+        print(f"Standard Prompts: {acc_a:.1f}% vs {acc_b:.1f}%")
+    
+    # Add MMLU results if available
+    if mmlu_comparison:
+        acc_a_mmlu = mmlu_comparison["model_a_result"]["accuracy"] * 100
+        acc_b_mmlu = mmlu_comparison["model_b_result"]["accuracy"] * 100
+        print(f"MMLU Accuracy: {acc_a_mmlu:.1f}% vs {acc_b_mmlu:.1f}%")
     
     # Cost Analysis section
     print("\nCost Analysis:")
@@ -176,6 +190,12 @@ def compare_models(model_a_summary, model_b_summary):
     cost_ratio_a = 1.0  # baseline
     cost_ratio_b = model_b_summary["total_cost"] / model_a_summary["total_cost"] if model_a_summary["total_cost"] else 0
     print(f"Cost-performance ratio: {cost_ratio_a:.1f}x vs {cost_ratio_b:.1f}x")
+    
+    # Add MMLU cost if available
+    if mmlu_comparison:
+        mmlu_cost_a = mmlu_comparison["model_a_result"]["total_cost"]
+        mmlu_cost_b = mmlu_comparison["model_b_result"]["total_cost"]
+        print(f"MMLU total cost: ${mmlu_cost_a:.6f} vs ${mmlu_cost_b:.6f}")
 
 def main():
     """Main CLI entry point."""
@@ -218,6 +238,23 @@ Prompt file format (each line):
         default=0,
         help="Temperature setting for model inference (default: 0 for deterministic outputs)"
     )
+    parser.add_argument(
+        "--skip-mmlu",
+        action="store_true",
+        help="Skip MMLU evaluation (faster but less comprehensive)"
+    )
+    parser.add_argument(
+        "--n-shots",
+        type=int,
+        default=0,
+        help="Number of few-shot examples to use for MMLU (default: 0 for zero-shot)"
+    )
+    parser.add_argument(
+        "--num-questions",
+        type=int,
+        default=5,
+        help="Number of questions per MMLU subject (default: 5)"
+    )
     
     args = parser.parse_args()
     
@@ -245,14 +282,92 @@ Prompt file format (each line):
         base_url="https://api.hyperbolic.xyz/v1",
     )
     
-    # Run tests for first model
+    # Run standard tests for first model
+    print("\n===== Running Standard Benchmark =====")
     model_a_summary = run_accuracy_tests(hyperbolic_client, args.model_a, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
     
-    # Run tests for second model
+    # Run standard tests for second model
     model_b_summary = run_accuracy_tests(hyperbolic_client, args.model_b, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
     
-    # Compare the models
-    compare_models(model_a_summary, model_b_summary)
+    # Run MMLU evaluation if available and not skipped
+    mmlu_comparison = None
+    if MMLU_AVAILABLE and not args.skip_mmlu:
+        try:
+            print("\n===== Running MMLU Evaluation =====")
+            # Load MMLU dataset
+            print("Loading MMLU dataset...")
+            subjects = DEFAULT_SUBJECTS
+            
+            datasets = []
+            for subject in subjects:
+                try:
+                    ds = load_dataset("cais/mmlu", subject, split="test")
+                    # Limit the number of questions per subject
+                    if args.num_questions < len(ds):
+                        ds = ds.select(range(args.num_questions))
+                    datasets.append(ds)
+                    print(f"Loaded {len(ds)} questions for {subject}")
+                except Exception as e:
+                    print(f"Error loading {subject}: {e}")
+            
+            from datasets import concatenate_datasets
+            if not datasets:
+                print("No datasets could be loaded. Skipping MMLU evaluation.")
+            else:
+                full_dataset = concatenate_datasets(datasets)
+                
+                # Prepare few-shot examples if n_shots > 0
+                few_shot_examples = None
+                if args.n_shots > 0:
+                    actual_n_shots = min(args.n_shots, len(full_dataset))
+                    
+                    if actual_n_shots < len(full_dataset):
+                        # Use the first n_shots examples for few-shot prompting
+                        few_shot_dataset = full_dataset.select(range(actual_n_shots))
+                        few_shot_examples = prepare_few_shot_examples(few_shot_dataset, actual_n_shots)
+                        # Use the remaining examples for testing
+                        test_dataset = full_dataset.select(range(actual_n_shots, len(full_dataset)))
+                    else:
+                        # Not enough data for separate few-shot examples and test cases
+                        # Use the same examples for both (not ideal but allows testing)
+                        print(f"Warning: Dataset only has {len(full_dataset)} examples, using same examples for few-shot and testing")
+                        few_shot_dataset = full_dataset.select(range(actual_n_shots))
+                        few_shot_examples = prepare_few_shot_examples(few_shot_dataset, actual_n_shots)
+                        test_dataset = full_dataset
+                else:
+                    test_dataset = full_dataset
+                
+                test_cases = prepare_mmlu_test_cases(test_dataset, num_questions=None)  # Use all loaded questions
+                
+                # Evaluate model A
+                print(f"\nEvaluating {args.model_a}...")
+                result_a = evaluate_model_on_mmlu(hyperbolic_client, args.model_a, test_cases, 
+                                                system_prompt=args.system, 
+                                                few_shot_examples=few_shot_examples,
+                                                temperature=args.temperature, 
+                                                verbose=args.verbose)
+                
+                # Evaluate model B
+                print(f"\nEvaluating {args.model_b}...")
+                result_b = evaluate_model_on_mmlu(hyperbolic_client, args.model_b, test_cases, 
+                                                system_prompt=args.system, 
+                                                few_shot_examples=few_shot_examples,
+                                                temperature=args.temperature, 
+                                                verbose=args.verbose)
+                
+                # Compare results
+                comparison = compare_mmlu_results(result_a, result_b)
+                mmlu_comparison = {
+                    "model_a_result": result_a,
+                    "model_b_result": result_b,
+                    "comparison": comparison
+                }
+        except Exception as e:
+            print(f"Error running MMLU evaluation: {e}")
+            print("Continuing with standard benchmark results only.")
+    
+    # Compare the models with comprehensive results
+    compare_models(model_a_summary, model_b_summary, mmlu_comparison)
     
 if __name__ == "__main__":
     main() 

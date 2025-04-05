@@ -2,6 +2,12 @@
 import sys
 import os
 
+# Get the directory of this script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Add the script directory to the Python path to ensure modules can be found
+sys.path.insert(0, os.path.dirname(script_dir))
+
 # Import and run the CLI main function
 from cli import main
 if __name__ == "__main__":
