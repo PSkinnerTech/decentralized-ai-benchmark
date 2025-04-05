@@ -29,7 +29,7 @@ MODEL_PRICING = {
     }
 }
 
-def get_model_metrics(client, model_name, messages, verbose=False):
+def get_model_metrics(client, model_name, messages, temperature=0, verbose=False):
     """
     Calls the Hyperbolic API, calculates performance metrics, and returns them.
     
@@ -37,6 +37,7 @@ def get_model_metrics(client, model_name, messages, verbose=False):
         client: An initialized OpenAI client for Hyperbolic
         model_name: Name of the model to test
         messages: List of message objects (system, user, etc.)
+        temperature: Temperature setting for model inference (default: 0 for deterministic outputs)
         verbose: Whether to print warnings and additional info
         
     Returns:
@@ -62,7 +63,7 @@ def get_model_metrics(client, model_name, messages, verbose=False):
         stream = client.chat.completions.create(
             model=model_name,
             messages=messages,
-            temperature=0.7,
+            temperature=temperature,
             max_tokens=1024,
             stream=True,
         )

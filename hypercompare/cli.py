@@ -41,7 +41,7 @@ def parse_prompts_file(file_path):
     
     return prompts
 
-def run_accuracy_tests(client, model_name, test_prompts, system_prompt, verbose=False):
+def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperature=0, verbose=False):
     """Run accuracy tests on a model and return metrics."""
     print(f"\n--- Testing Model: {model_name} ---")
     correct_responses = 0
@@ -56,7 +56,7 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, verbose=
             {"role": "user", "content": test_case["prompt"]},
         ]
         
-        metrics = get_model_metrics(client, model_name, messages, verbose=verbose)
+        metrics = get_model_metrics(client, model_name, messages, verbose=verbose, temperature=temperature)
         all_metrics.append(metrics)
         total_cost += metrics.get("cost", 0)
 
@@ -212,6 +212,12 @@ Prompt file format (each line):
         action="store_true",
         help="Show more detailed output and warnings"
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0,
+        help="Temperature setting for model inference (default: 0 for deterministic outputs)"
+    )
     
     args = parser.parse_args()
     
@@ -240,10 +246,10 @@ Prompt file format (each line):
     )
     
     # Run tests for first model
-    model_a_summary = run_accuracy_tests(hyperbolic_client, args.model_a, test_prompts, args.system, verbose=args.verbose)
+    model_a_summary = run_accuracy_tests(hyperbolic_client, args.model_a, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
     
     # Run tests for second model
-    model_b_summary = run_accuracy_tests(hyperbolic_client, args.model_b, test_prompts, args.system, verbose=args.verbose)
+    model_b_summary = run_accuracy_tests(hyperbolic_client, args.model_b, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
     
     # Compare the models
     compare_models(model_a_summary, model_b_summary)

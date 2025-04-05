@@ -148,6 +148,38 @@ def prepare_mmlu_test_cases(dataset, num_questions=10):
     
     return test_cases
 
+def prepare_few_shot_examples(dataset, n_shots=5):
+    """
+    Create few-shot examples for MMLU evaluation.
+    
+    Args:
+        dataset: HuggingFace dataset containing MMLU questions
+        n_shots: Number of examples to use (default: 5)
+        
+    Returns:
+        list: List of (question, answer) tuples for few-shot prompting
+    """
+    examples = []
+    # Use the first n_shots examples from the dataset
+    # We'll use different examples than the test cases
+    n_examples = min(n_shots, len(dataset))
+    
+    for i in range(n_examples):
+        example = dataset[i]
+        question = example['question']
+        choices = example['choices']
+        
+        # Format the prompt
+        prompt = format_mmlu_prompt(question, choices)
+        
+        # The answer is a numeric index (0-3) that we convert to letter (A-D)
+        correct_answer_index = example['answer']
+        correct_answer_letter = chr(65 + correct_answer_index)  # Convert to A, B, C, D
+        
+        examples.append((prompt, correct_answer_letter))
+    
+    return examples
+
 def list_available_subjects():
     """List all available subjects in the MMLU dataset."""
     try:
