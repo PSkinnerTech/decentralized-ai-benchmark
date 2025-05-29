@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import time
 
 # Import our metrics function
-from hyperapi import get_model_metrics, MODEL_PRICING
+from hyperapi import get_model_metrics, MODEL_PRICING, get_api_client, PROVIDER_MODELS
 
 # Import MMLU evaluation functions
 try:
@@ -50,9 +50,9 @@ def parse_prompts_file(file_path):
     
     return prompts
 
-def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperature=0, verbose=False):
+def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperature=0, verbose=False, provider=None):
     """Run accuracy tests on a model and return metrics."""
-    print(f"\n--- Testing Model: {model_name} ---")
+    print(f"\n--- Testing Model: {model_name} ({provider or 'auto-detected provider'}) ---")
     correct_responses = 0
     total_prompts = len(test_prompts)
     total_cost = 0
@@ -65,7 +65,7 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperat
             {"role": "user", "content": test_case["prompt"]},
         ]
         
-        metrics = get_model_metrics(client, model_name, messages, verbose=verbose, temperature=temperature)
+        metrics = get_model_metrics(client, model_name, messages, verbose=verbose, temperature=temperature, provider=provider)
         all_metrics.append(metrics)
         total_cost += metrics.get("cost", 0)
 
@@ -78,6 +78,7 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperat
             print(f"  Completion Tokens: {metrics['completion_tokens']}")
             print(f"  Throughput: {metrics['throughput']:.2f} tokens/sec")
             print(f"  Cost: ${metrics['cost']:.6f}")
+            print(f"  Provider: {metrics.get('provider', 'unknown')}")
             
             if test_case["expected_keywords"]:
                 response_lower = metrics["response_content"].lower()
@@ -115,6 +116,7 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperat
     # Summary
     summary = {
         "model": model_name,
+        "provider": provider or all_metrics[0].get("provider", "unknown") if all_metrics else "unknown",
         "correct_responses": correct_responses,
         "total_prompts": total_prompts,
         "accuracy_score": accuracy_score,
@@ -128,6 +130,7 @@ def run_accuracy_tests(client, model_name, test_prompts, system_prompt, temperat
     # Print summary
     print("\n--- Model Summary ---")
     print(f"Model: {model_name}")
+    print(f"Provider: {summary['provider']}")
     if has_expected_answers:
         print(f"Correct Responses: {correct_responses}/{total_prompts}")
         print(f"Accuracy Score: {accuracy_score:.2f}")
@@ -142,8 +145,10 @@ def compare_models(model_a_summary, model_b_summary, mmlu_comparison=None):
     """Print a side-by-side comparison of two models."""
     model_a = model_a_summary["model"]
     model_b = model_b_summary["model"]
+    provider_a = model_a_summary.get("provider", "unknown")
+    provider_b = model_b_summary.get("provider", "unknown")
     
-    print(f"\n============ COMPARISON: {model_a} vs {model_b} ============")
+    print(f"\n============ COMPARISON: {model_a} ({provider_a}) vs {model_b} ({provider_b}) ============")
     
     # Check if either model had fatal errors
     model_a_failed = model_a_summary["avg_latency"] is None
@@ -158,6 +163,13 @@ def compare_models(model_a_summary, model_b_summary, mmlu_comparison=None):
     elif model_b_failed:
         print(f"\n{model_b} failed to produce any results. Cannot compare.")
         return
+    
+    # Provider Information
+    print(f"\nProvider Information:")
+    print(f"Model A: {provider_a}")
+    print(f"Model B: {provider_b}")
+    if provider_a != provider_b:
+        print("*** Cross-platform comparison: Decentralized vs Centralized AI ***")
     
     # Speed Metrics section
     print("\nSpeed Metrics:")
@@ -196,6 +208,17 @@ def compare_models(model_a_summary, model_b_summary, mmlu_comparison=None):
         mmlu_cost_a = mmlu_comparison["model_a_result"]["total_cost"]
         mmlu_cost_b = mmlu_comparison["model_b_result"]["total_cost"]
         print(f"MMLU total cost: ${mmlu_cost_a:.6f} vs ${mmlu_cost_b:.6f}")
+    
+    # Decentralization insights (if comparing different providers)
+    if provider_a != provider_b:
+        print(f"\nDecentralization Analysis:")
+        if provider_a == "lilypad" or provider_b == "lilypad":
+            lilypad_model = model_a if provider_a == "lilypad" else model_b
+            centralized_model = model_b if provider_a == "lilypad" else model_a
+            print(f"• {lilypad_model} runs on decentralized compute network")
+            print(f"• {centralized_model} runs on centralized infrastructure")
+            print("• Lilypad provides cryptographic verification of compute execution")
+            print("• Potential benefits: censorship resistance, geographic distribution")
 
 def main():
     """Main CLI entry point."""
@@ -218,6 +241,12 @@ Prompt file format (each line):
     
     parser.add_argument("model_a", help="First model to benchmark")
     parser.add_argument("model_b", help="Second model to benchmark")
+    parser.add_argument(
+        "--providers", 
+        nargs=2,
+        choices=["hyperbolic", "lilypad"],
+        help="Specify providers for model_a and model_b (e.g., --providers hyperbolic lilypad)"
+    )
     parser.add_argument(
         "--prompts", 
         help="Path to a file containing test prompts. Each line is a prompt, optionally with expected answers after | character"
@@ -258,10 +287,35 @@ Prompt file format (each line):
     
     args = parser.parse_args()
     
-    # Check for environment variables
-    if not os.getenv("HYPERBOLIC_API_KEY"):
-        print("Error: HYPERBOLIC_API_KEY not found in environment variables.")
-        print("Please create a .env file with your API key or set it in your environment.")
+    # Determine providers for each model
+    if args.providers:
+        provider_a, provider_b = args.providers
+    else:
+        # Auto-detect providers based on model names
+        provider_a = MODEL_PRICING.get(args.model_a, MODEL_PRICING["default"]).get("provider", "hyperbolic")
+        provider_b = MODEL_PRICING.get(args.model_b, MODEL_PRICING["default"]).get("provider", "hyperbolic")
+    
+    # Validate model-provider combinations
+    if provider_a == "lilypad" and args.model_a not in PROVIDER_MODELS["lilypad"]:
+        print(f"Warning: Model '{args.model_a}' may not be available on Lilypad. Available models: {PROVIDER_MODELS['lilypad']}")
+    if provider_b == "lilypad" and args.model_b not in PROVIDER_MODELS["lilypad"]:
+        print(f"Warning: Model '{args.model_b}' may not be available on Lilypad. Available models: {PROVIDER_MODELS['lilypad']}")
+    
+    # Check for required environment variables
+    required_keys = set()
+    if provider_a == "lilypad" or provider_b == "lilypad":
+        required_keys.add("LILYPAD_API_KEY")
+    if provider_a == "hyperbolic" or provider_b == "hyperbolic":
+        required_keys.add("HYPERBOLIC_API_KEY")
+    
+    missing_keys = [key for key in required_keys if not os.getenv(key)]
+    if missing_keys:
+        print(f"Error: The following API keys are required but not found in environment variables: {', '.join(missing_keys)}")
+        print("Please create a .env file with your API keys or set them in your environment.")
+        if "LILYPAD_API_KEY" in missing_keys:
+            print("For Lilypad: Add LILYPAD_API_KEY to your .env file")
+        if "HYPERBOLIC_API_KEY" in missing_keys:
+            print("For Hyperbolic: Add HYPERBOLIC_API_KEY to your .env file")
         sys.exit(1)
     
     # Load test prompts
@@ -276,18 +330,20 @@ Prompt file format (each line):
             print(f"Error reading prompts file: {e}")
             print("Using default test prompts instead.")
     
-    # Initialize OpenAI client for Hyperbolic
-    hyperbolic_client = openai.OpenAI(
-        api_key=os.getenv('HYPERBOLIC_API_KEY'),
-        base_url="https://api.hyperbolic.xyz/v1",
-    )
+    # Initialize API clients based on providers
+    try:
+        client_a = get_api_client(args.model_a, provider_a)
+        client_b = get_api_client(args.model_b, provider_b)
+    except ValueError as e:
+        print(f"Error initializing API clients: {e}")
+        sys.exit(1)
     
     # Run standard tests for first model
     print("\n===== Running Standard Benchmark =====")
-    model_a_summary = run_accuracy_tests(hyperbolic_client, args.model_a, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
+    model_a_summary = run_accuracy_tests(client_a, args.model_a, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose, provider=provider_a)
     
     # Run standard tests for second model
-    model_b_summary = run_accuracy_tests(hyperbolic_client, args.model_b, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose)
+    model_b_summary = run_accuracy_tests(client_b, args.model_b, test_prompts, args.system, temperature=args.temperature, verbose=args.verbose, provider=provider_b)
     
     # Run MMLU evaluation if available and not skipped
     mmlu_comparison = None
@@ -341,7 +397,7 @@ Prompt file format (each line):
                 
                 # Evaluate model A
                 print(f"\nEvaluating {args.model_a}...")
-                result_a = evaluate_model_on_mmlu(hyperbolic_client, args.model_a, test_cases, 
+                result_a = evaluate_model_on_mmlu(client_a, args.model_a, test_cases, 
                                                 system_prompt=args.system, 
                                                 few_shot_examples=few_shot_examples,
                                                 temperature=args.temperature, 
@@ -349,7 +405,7 @@ Prompt file format (each line):
                 
                 # Evaluate model B
                 print(f"\nEvaluating {args.model_b}...")
-                result_b = evaluate_model_on_mmlu(hyperbolic_client, args.model_b, test_cases, 
+                result_b = evaluate_model_on_mmlu(client_b, args.model_b, test_cases, 
                                                 system_prompt=args.system, 
                                                 few_shot_examples=few_shot_examples,
                                                 temperature=args.temperature, 

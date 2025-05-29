@@ -1,22 +1,25 @@
-# Hyperbolic Model Benchmarking Tool
+# AI Model Benchmarking Tool - Decentralized vs Centralized Comparison
 
-A CLI tool for benchmarking different language models hosted on Hyperbolic's API. Compare models based on speed (latency, throughput), accuracy, and cost metrics.
+A CLI tool for benchmarking different language models across multiple providers. Compare models from Hyperbolic's centralized API and Lilypad's decentralized compute network based on speed (latency, throughput), accuracy, and cost metrics.
 
 ## Features
 
+- **Cross-Platform Support**: Compare models between Hyperbolic (centralized) and Lilypad (decentralized) providers
 - **Speed Metrics**: Measure latency, time to first token (TTFT), and throughput (tokens/sec)
 - **Accuracy Testing**: Evaluate model responses against expected keywords
-- **Cost Analysis**: Calculate token usage and associated costs
-- **Model Comparison**: Compare metrics between two different models
+- **Cost Analysis**: Calculate token usage and associated costs across providers
+- **Model Comparison**: Compare metrics between two different models from any supported provider
 - **MMLU Evaluation**: Automatic testing on Massive Multitask Language Understanding benchmark
-- **Simple CLI**: Easy-to-use command-line interface
+- **Decentralization Analysis**: Special insights when comparing decentralized vs centralized AI
+- **Simple CLI**: Easy-to-use command-line interface with provider selection
 - **Deterministic Testing**: Uses temperature=0 for reproducible benchmarking results
 
 ## Prerequisites
 
 - Python 3.8+
-- A Hyperbolic account with API access
-- API credits for Hyperbolic's API
+- API access to one or more providers:
+  - **Hyperbolic**: Account with API credits for centralized AI models
+  - **Lilypad**: API key for decentralized compute network (contact team for testnet access)
 
 ## Setup Instructions
 
@@ -41,21 +44,32 @@ source venv/bin/activate  # On Windows, use: venv\Scripts\activate
 pip install openai python-dotenv requests argparse
 ```
 
-### 4. Get Your Hyperbolic API Key
+### 4. Get Your API Keys
 
+#### Hyperbolic API Key
 1. Create an account at [Hyperbolic](https://hyperbolic.xyz/) if you don't already have one.
 2. Request API credits from your Hyperbolic contact.
 3. Go to your account settings to retrieve your API key.
+
+#### Lilypad API Key
+1. Contact the Lilypad team for testnet access
+2. Obtain your API key for the Anura testnet
+3. Lilypad provides decentralized compute with cryptographic verification
 
 ### 5. Set Up Environment Variables
 
 Create a `.env` file in the project root:
 
 ```bash
-echo "HYPERBOLIC_API_KEY=your-api-key-here" > .env
+# Copy the example file
+cp .env.example .env
+
+# Edit .env with your actual API keys
+HYPERBOLIC_API_KEY=your_hyperbolic_api_key_here
+LILYPAD_API_KEY=your_lilypad_api_key_here
 ```
 
-Replace `your-api-key-here` with your actual Hyperbolic API key.
+Note: You only need the API keys for the providers you plan to use.
 
 ### 6. Make the Script Executable (Unix/Linux/Mac)
 
@@ -63,7 +77,56 @@ Replace `your-api-key-here` with your actual Hyperbolic API key.
 chmod +x hypercompare
 ```
 
+## Available Models by Provider
+
+### Hyperbolic (Centralized AI)
+- `meta-llama/Meta-Llama-3-70B-Instruct` - Large 70B parameter model
+- `meta-llama/Meta-Llama-3.1-8B-Instruct` - Efficient 8B parameter model
+- `mistralai/Mixtral-8x7B-Instruct-v0.1` - Mixture of experts model
+
+### Lilypad (Decentralized AI)
+- `deepseek-r1:7b` - Advanced reasoning model
+- `llama3.1:8b` - Llama 3.1 8B on decentralized network
+- `qwen2.5:7b` - Qwen 2.5 7B model
+- `qwen2.5-coder:7b` - Code-specialized Qwen model
+- `phi4-mini:3.8b` - Compact but capable model
+- `mistral:7b` - Mistral 7B on decentralized infrastructure
+- `llava:7b` - Vision-language model (multimodal)
+
 ## Usage
+
+### Cross-Platform Comparisons (Decentralized vs Centralized)
+
+Compare the same model family across different infrastructure:
+
+```bash
+# Llama 3.1 8B: Centralized vs Decentralized
+./hypercompare meta-llama/Meta-Llama-3.1-8B-Instruct llama3.1:8b --providers hyperbolic lilypad
+
+# Different models, different providers
+./hypercompare meta-llama/Meta-Llama-3-70B-Instruct deepseek-r1:7b --providers hyperbolic lilypad
+```
+
+### Same-Provider Comparisons
+
+Compare different models on the same provider:
+
+```bash
+# Compare two Hyperbolic models
+./hypercompare meta-llama/Meta-Llama-3-70B-Instruct meta-llama/Meta-Llama-3.1-8B-Instruct
+
+# Compare two Lilypad models
+./hypercompare deepseek-r1:7b qwen2.5:7b --providers lilypad lilypad
+```
+
+### Auto-Detection
+
+The tool automatically detects providers based on model names if --providers is not specified:
+
+```bash
+# This automatically uses hyperbolic for the first model and lilypad for the second
+./hypercompare meta-llama/Meta-Llama-3.1-8B-Instruct llama3.1:8b
+```
 
 ### Basic Usage
 
@@ -113,6 +176,10 @@ What are three programming best practices?
 
 ```
   -h, --help              Show this help message and exit
+  --providers PROVIDER PROVIDER
+                          Specify providers for model_a and model_b 
+                          (choices: hyperbolic, lilypad)
+                          Example: --providers hyperbolic lilypad
   --prompts PROMPTS       Path to a file containing test prompts
   --system SYSTEM         System prompt to use for all test cases
   --verbose               Show more detailed output and warnings
@@ -135,7 +202,8 @@ The tool uses the following configuration to ensure consistent, reproducible ben
 The tool will output:
 
 1. **Standard Benchmark:**
-   - Individual test results with metrics
+   - Individual test results with metrics for each model
+   - Provider information (Hyperbolic/Lilypad)
    - Model summary with averages
 
 2. **MMLU Evaluation (if not skipped):**
@@ -143,10 +211,42 @@ The tool will output:
    - Accuracy per subject and overall
 
 3. **Comprehensive Comparison:**
-   - Speed metrics (TTFT, latency, throughput)
-   - Accuracy scores (both standard prompts and MMLU)
-   - Cost analysis
+   - **Provider Information**: Which infrastructure each model uses
+   - **Speed metrics**: TTFT, latency, throughput
+   - **Accuracy scores**: Both standard prompts and MMLU
+   - **Cost analysis**: Cross-provider pricing comparison
+   - **Decentralization Analysis**: Special insights for cross-platform comparisons
    - Overall assessment of which model performs better in different categories
+
+#### Example Cross-Platform Output:
+```
+============ COMPARISON: meta-llama/Meta-Llama-3.1-8B-Instruct (hyperbolic) vs llama3.1:8b (lilypad) ============
+
+Provider Information:
+Model A: hyperbolic
+Model B: lilypad
+*** Cross-platform comparison: Decentralized vs Centralized AI ***
+
+Speed Metrics:
+Time to first token: 245ms vs 312ms
+Total latency: 2.1s vs 2.8s
+Tokens/sec: 95 vs 78
+
+Accuracy Metrics:
+Standard Prompts: 100.0% vs 100.0%
+MMLU Accuracy: 73.2% vs 71.8%
+
+Cost Analysis:
+Input tokens: $0.002/1K vs $0.001/1K
+Output tokens: $0.003/1K vs $0.002/1K
+Cost-performance ratio: 1.0x vs 0.7x
+
+Decentralization Analysis:
+• llama3.1:8b runs on decentralized compute network
+• meta-llama/Meta-Llama-3.1-8B-Instruct runs on centralized infrastructure
+• Lilypad provides cryptographic verification of compute execution
+• Potential benefits: censorship resistance, geographic distribution
+```
 
 ### Available Models
 
@@ -273,3 +373,4 @@ MIT © [PSkinnerTech](https://github.com/PSkinnerTech)
 ## Acknowledgments
 
 - Hyperbolic for providing the API service
+- Lilypad for providing the decentralized compute network

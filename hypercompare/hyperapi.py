@@ -6,39 +6,123 @@ from dotenv import load_dotenv
 """
 Core API module for the Hyperbolic model benchmarking tool.
 Provides functions to call the Hyperbolic API and calculate performance metrics.
+Now supports both Hyperbolic and Lilypad providers for comparison.
 """
 
 load_dotenv()
 
-# Simplified model pricing (cents per 1K tokens)
-# This would ideally come from a configuration file or API
+# Model pricing with provider information (cents per 1K tokens)
 MODEL_PRICING = {
+    # Hyperbolic models
     "meta-llama/Meta-Llama-3-70B-Instruct": {
         "input_rate": 0.0025,  # $0.0025 per 1K input tokens
         "output_rate": 0.0035,  # $0.0035 per 1K output tokens
+        "provider": "hyperbolic"
+    },
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+        "input_rate": 0.002,   # $0.002 per 1K input tokens
+        "output_rate": 0.003,  # $0.003 per 1K output tokens
+        "provider": "hyperbolic"
     },
     "mistralai/Mixtral-8x7B-Instruct-v0.1": {
         "input_rate": 0.0028,  # $0.0028 per 1K input tokens
         "output_rate": 0.0038,  # $0.0038 per 1K output tokens
+        "provider": "hyperbolic"
     },
-    # Add more models as needed
+    
+    # Lilypad models (pricing TBD - contact Lilypad team)
+    "deepseek-r1:7b": {
+        "input_rate": 0.001,   # TBD - contact Lilypad team
+        "output_rate": 0.002,  # TBD - contact Lilypad team
+        "provider": "lilypad"
+    },
+    "llama3.1:8b": {
+        "input_rate": 0.001,   # TBD
+        "output_rate": 0.002,  # TBD
+        "provider": "lilypad"
+    },
+    "qwen2.5:7b": {
+        "input_rate": 0.001,   # TBD
+        "output_rate": 0.002,  # TBD
+        "provider": "lilypad"
+    },
+    "qwen2.5-coder:7b": {
+        "input_rate": 0.001,   # TBD
+        "output_rate": 0.002,  # TBD
+        "provider": "lilypad"
+    },
+    "phi4-mini:3.8b": {
+        "input_rate": 0.0008,  # TBD
+        "output_rate": 0.0015, # TBD
+        "provider": "lilypad"
+    },
+    "mistral:7b": {
+        "input_rate": 0.001,   # TBD
+        "output_rate": 0.002,  # TBD
+        "provider": "lilypad"
+    },
+    "llava:7b": {
+        "input_rate": 0.001,   # TBD - Vision model
+        "output_rate": 0.002,  # TBD
+        "provider": "lilypad"
+    },
+    
     # Default fallback for unknown models
     "default": {
         "input_rate": 0.003,
         "output_rate": 0.004,
+        "provider": "hyperbolic"
     }
 }
 
-def get_model_metrics(client, model_name, messages, temperature=0, verbose=False):
+# Provider model availability matrix
+PROVIDER_MODELS = {
+    "hyperbolic": [
+        "meta-llama/Meta-Llama-3-70B-Instruct",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct",
+        "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    ],
+    "lilypad": [
+        "deepseek-r1:7b",
+        "llama3.1:8b", 
+        "qwen2.5:7b",
+        "qwen2.5-coder:7b",
+        "phi4-mini:3.8b",
+        "mistral:7b",
+        "llava:7b"
+    ]
+}
+
+def get_api_client(model_name, provider=None):
+    """Return appropriate API client based on model or explicit provider."""
+    if provider == "lilypad" or MODEL_PRICING.get(model_name, {}).get("provider") == "lilypad":
+        api_key = os.getenv('LILYPAD_API_KEY')
+        if not api_key:
+            raise ValueError("LILYPAD_API_KEY not found in environment variables. Please add it to your .env file.")
+        return openai.OpenAI(
+            api_key=api_key,
+            base_url="https://anura-testnet.lilypad.tech/api/v1",
+        )
+    else:  # Default to Hyperbolic
+        api_key = os.getenv('HYPERBOLIC_API_KEY')
+        if not api_key:
+            raise ValueError("HYPERBOLIC_API_KEY not found in environment variables. Please add it to your .env file.")
+        return openai.OpenAI(
+            api_key=api_key,
+            base_url="https://api.hyperbolic.xyz/v1",
+        )
+
+def get_model_metrics(client, model_name, messages, temperature=0, verbose=False, provider=None):
     """
-    Calls the Hyperbolic API, calculates performance metrics, and returns them.
+    Calls the API (Hyperbolic or Lilypad), calculates performance metrics, and returns them.
     
     Args:
-        client: An initialized OpenAI client for Hyperbolic
+        client: An initialized OpenAI client for the appropriate provider
         model_name: Name of the model to test
         messages: List of message objects (system, user, etc.)
         temperature: Temperature setting for model inference (default: 0 for deterministic outputs)
         verbose: Whether to print warnings and additional info
+        provider: Optional provider override for metrics calculation
         
     Returns:
         Dictionary containing performance metrics:
@@ -51,6 +135,7 @@ def get_model_metrics(client, model_name, messages, temperature=0, verbose=False
         - cost: Estimated cost of the API call
         - input_rate: Input token pricing
         - output_rate: Output token pricing
+        - provider: Which provider was used
     """
     start_time = time.time()
     first_token_time = None
@@ -94,6 +179,10 @@ def get_model_metrics(client, model_name, messages, temperature=0, verbose=False
         pricing = MODEL_PRICING.get(model_name, MODEL_PRICING["default"])
         input_rate = pricing["input_rate"]
         output_rate = pricing["output_rate"]
+        detected_provider = pricing.get("provider", "hyperbolic")
+        
+        # Use explicit provider if provided, otherwise use detected provider
+        actual_provider = provider if provider else detected_provider
         
         # Apply the cost formula from the guide
         cost = ((prompt_tokens * input_rate) + (completion_tokens * output_rate)) / 1000
@@ -107,7 +196,8 @@ def get_model_metrics(client, model_name, messages, temperature=0, verbose=False
             "throughput": throughput,
             "cost": cost,
             "input_rate": input_rate,
-            "output_rate": output_rate
+            "output_rate": output_rate,
+            "provider": actual_provider
         }
 
     except Exception as e:
@@ -121,5 +211,6 @@ def get_model_metrics(client, model_name, messages, temperature=0, verbose=False
             "completion_tokens": 0,
             "throughput": 0,
             "cost": 0,
+            "provider": provider or "unknown",
             "error": str(e)
         }
