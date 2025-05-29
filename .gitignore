@@ -39,3 +39,6 @@ ENV/
 
 # Project specific
 *.log
+
+# Docs
+/docs
