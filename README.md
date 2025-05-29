@@ -1,3 +1,5 @@
+![Centralized vs Decentralized Inference](gh-banner.png)
+
 # AI Model Benchmarking Tool - Decentralized vs Centralized Comparison
 
 A CLI tool for benchmarking different language models across multiple providers. Compare models from Hyperbolic's centralized API and Lilypad's decentralized compute network based on speed (latency, throughput), accuracy, and cost metrics.
